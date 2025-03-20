@@ -46,7 +46,7 @@ class WheelRobotCfg(LeggedRobotCfg):
     class commands(LeggedRobotCfg.commands):
         curriculum = False
         max_curriculum = 1.
-        num_commands = 5 # default: lin_vel_x, height, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+        num_commands = 4 # default: lin_vel_x, height, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:

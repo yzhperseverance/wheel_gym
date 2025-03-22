@@ -45,6 +45,7 @@ def play(args):
 
     #env_cfg.terrain.mesh_type = "plane"
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 50)
+    env_cfg.init_state.pos = [0, 0, 0.25]
     env_cfg.terrain.num_rows = 5
     env_cfg.terrain.num_cols = 5
     env_cfg.terrain.curriculum = False
@@ -79,7 +80,7 @@ def play(args):
     img_idx = 0
 
     ctrl = keyboard.KeyboardCtrl(env, env_cfg)
-    base_command = torch.tensor([0.2, 0.1, 0, 0], dtype=torch.float32)
+    base_command = torch.tensor([0.2, 0.1, 0, 0, 0], dtype=torch.float32)
     env.commands[:, ] = base_command
 
 

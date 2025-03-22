@@ -58,7 +58,7 @@ class Terrain:
         self.tot_cols = int(cfg.num_cols * self.width_per_env_pixels) + 2 * self.border
         self.tot_rows = int(cfg.num_rows * self.length_per_env_pixels) + 2 * self.border
 
-        self.height_field_raw = np.zeros((self.tot_rows , self.tot_cols), dtype=np.int16)
+        self.height_field_raw = np.zeros((self.tot_rows, self.tot_cols), dtype=np.int16)
         if cfg.curriculum:
             self.curiculum()
         elif cfg.selected:
@@ -80,9 +80,11 @@ class Terrain:
 
             choice = np.random.uniform(0, 1)
             difficulty = np.random.choice([0.5, 0.75, 0.9])
+
             terrain = self.make_terrain(choice, difficulty)
             self.add_terrain_to_map(terrain, i, j)
-        
+        self.height_field_raw = self.height_field_raw.T
+
     def curiculum(self):
         for j in range(self.cfg.num_cols):
             for i in range(self.cfg.num_rows):
@@ -101,8 +103,8 @@ class Terrain:
             terrain = terrain_utils.SubTerrain("terrain",
                               width=self.width_per_env_pixels,
                               length=self.width_per_env_pixels,
-                              vertical_scale=self.vertical_scale,
-                              horizontal_scale=self.horizontal_scale)
+                              vertical_scale=self.cfg.vertical_scale,
+                              horizontal_scale=self.cfg.horizontal_scale)
 
             eval(terrain_type)(terrain, **self.cfg.terrain_kwargs.terrain_kwargs)
             self.add_terrain_to_map(terrain, i, j)
@@ -154,7 +156,11 @@ class Terrain:
         start_y = self.border + j * self.width_per_env_pixels
         end_y = self.border + (j + 1) * self.width_per_env_pixels
         self.height_field_raw[start_x: end_x, start_y:end_y] = terrain.height_field_raw
-
+        #self.height_field_raw[start_y: end_y, start_x:end_x] = terrain.height_field_raw
+        # print("start_x=", start_x, "end_x=", end_x)
+        # print("start_y=", start_y, "end_y=", end_y)
+        # if start_x == 410 and start_y == 250:
+        #     print("height_field_raw=", self.height_field_raw[437, 276])
         env_origin_x = (i + 0.5) * self.env_length
         env_origin_y = (j + 0.5) * self.env_width
         x1 = int((self.env_length/2. - 1) / terrain.horizontal_scale)

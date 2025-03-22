@@ -64,7 +64,7 @@ class LeggedRobot(BaseTask):
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
-        self.debug_viz = False
+        self.debug_viz = True
         self.init_done = False
         self._parse_cfg(self.cfg)
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
@@ -522,6 +522,7 @@ class LeggedRobot(BaseTask):
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
         if self.cfg.terrain.measure_heights:
             self.height_points = self._init_height_points()
+
         self.measured_heights = 0
 
         # joint positions offsets and PD gains
@@ -587,14 +588,14 @@ class LeggedRobot(BaseTask):
         hf_params.row_scale = self.terrain.cfg.horizontal_scale
         hf_params.vertical_scale = self.terrain.cfg.vertical_scale
         hf_params.nbRows = self.terrain.tot_cols
-        hf_params.nbColumns = self.terrain.tot_rows 
+        hf_params.nbColumns = self.terrain.tot_rows
         hf_params.transform.p.x = -self.terrain.cfg.border_size 
         hf_params.transform.p.y = -self.terrain.cfg.border_size
         hf_params.transform.p.z = 0.0
         hf_params.static_friction = self.cfg.terrain.static_friction
         hf_params.dynamic_friction = self.cfg.terrain.dynamic_friction
         hf_params.restitution = self.cfg.terrain.restitution
-        self.gym.add_heightfield(self.sim, self.terrain.heightsamples.reshape(-1), hf_params)
+        self.gym.add_heightfield(self.sim, self.terrain.heightsamples.T.reshape(-1), hf_params)
         self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows, self.terrain.tot_cols).to(self.device)
 
 
@@ -663,6 +664,7 @@ class LeggedRobot(BaseTask):
 
         base_init_state_list = self.cfg.init_state.pos + self.cfg.init_state.rot + self.cfg.init_state.lin_vel + self.cfg.init_state.ang_vel
         self.base_init_state = to_torch(base_init_state_list, device=self.device, requires_grad=False)
+
         start_pose = gymapi.Transform()
         start_pose.p = gymapi.Vec3(*self.base_init_state[:3])
 
@@ -753,6 +755,7 @@ class LeggedRobot(BaseTask):
         for i in range(self.num_envs):
             base_pos = (self.root_states[i, :3]).cpu().numpy()
             heights = self.measured_heights[i].cpu().numpy()
+
             height_points = quat_apply_yaw(self.base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
             for j in range(heights.shape[0]):
                 x = height_points[j, 0] + base_pos[0]
@@ -806,13 +809,19 @@ class LeggedRobot(BaseTask):
         py = points[:, :, 1].view(-1)
         px = torch.clip(px, 0, self.height_samples.shape[0]-2)
         py = torch.clip(py, 0, self.height_samples.shape[1]-2)
-
+        #print("shape=", self.height_samples.shape)
+        # height_sample的x轴和y轴与世界系的x轴和y轴相反！！！！
         heights1 = self.height_samples[px, py]
         heights2 = self.height_samples[px+1, py]
         heights3 = self.height_samples[px, py+1]
+
+        # heights1 = self.height_samples[py, px]
+        # heights2 = self.height_samples[py + 1, px]
+        # heights3 = self.height_samples[py, px + 1]
+
         heights = torch.min(heights1, heights2)
         heights = torch.min(heights, heights3)
-
+        #print("heights=", heights)
         return heights.view(self.num_envs, -1) * self.terrain.cfg.vertical_scale
 
     #------------ reward functions----------------
@@ -831,6 +840,7 @@ class LeggedRobot(BaseTask):
     def _reward_base_height(self):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+
         return torch.square(base_height - self.cfg.rewards.base_height_target)
     
     def _reward_torques(self):

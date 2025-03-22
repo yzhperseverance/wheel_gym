@@ -38,7 +38,7 @@ class WheelRobotCfg(LeggedRobotCfg):
     class env(LeggedRobotCfg.env):
         num_envs = 4096
         num_observations = 38
-        num_privileged_obs = 58 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
+        num_privileged_obs = 244 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 6
 
         fail_to_terminal_time_s = 0.5
@@ -46,18 +46,20 @@ class WheelRobotCfg(LeggedRobotCfg):
     class commands(LeggedRobotCfg.commands):
         curriculum = False
         max_curriculum = 1.
-        num_commands = 4 # default: lin_vel_x, height, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+        num_commands = 5 # default: lin_vel_x, height, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
+        threshold = 0
         class ranges:
             # TODO：这里修改x的范围会报cuda内存没对齐的错
             lin_vel_x = [-1.0, 1.0] # min max [m/s]
-            height = [0.1, 0.25]   # min max [m/s]
+            height = [0.2, 0.35]   # min max [m/s]
             ang_vel_yaw = [-3.14, 3.14]    # min max [rad/s]
             heading = [-3.14, 3.14]
+            jump_height = [0.05, 0.25]
 
     class init_state(LeggedRobotCfg.init_state):
-        pos = [0.0, 0.0, 0.5] # x,y,z [m]
+        pos = [0.0, 0.0, 1.0] # x,y,z [m]
         default_joint_angles = {  # target angles when action = 0.0
             "lf0_Joint": 0.5,
             "lf1_Joint": 0.35,
@@ -89,7 +91,7 @@ class WheelRobotCfg(LeggedRobotCfg):
 
     class terrain(LeggedRobotCfg.terrain):
         mesh_type = 'heightfield'  # "heightfield" # none, plane, heightfield or trimesh
-
+        measure_heights = True
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
         terrain_proportions = [0.5, 0.5, 0, 0, 0]
         num_rows= 10 # number of terrain rows (levels)

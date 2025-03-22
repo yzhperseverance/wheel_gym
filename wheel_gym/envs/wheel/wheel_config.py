@@ -37,8 +37,8 @@ from wheel_gym import WHEEL_GYM_ROOT_DIR, envs
 class WheelRobotCfg(LeggedRobotCfg):
     class env(LeggedRobotCfg.env):
         num_envs = 4096
-        num_observations = 38
-        num_privileged_obs = 244 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
+        num_observations = 39
+        num_privileged_obs = 247 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 6
 
         fail_to_terminal_time_s = 0.5
@@ -49,11 +49,11 @@ class WheelRobotCfg(LeggedRobotCfg):
         num_commands = 5 # default: lin_vel_x, height, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
-        threshold = 0
+        threshold = 0.5
         class ranges:
             # TODO：这里修改x的范围会报cuda内存没对齐的错
             lin_vel_x = [-1.0, 1.0] # min max [m/s]
-            height = [0.2, 0.35]   # min max [m/s]
+            height = [0.2, 0.4]   # min max [m/s]
             ang_vel_yaw = [-3.14, 3.14]    # min max [rad/s]
             heading = [-3.14, 3.14]
             jump_height = [0.05, 0.25]
@@ -160,7 +160,8 @@ class WheelRobotCfg(LeggedRobotCfg):
             dof_vel = -5e-5
             dof_acc = -2.5e-7
             feet_match = -2.0
-            # feet_air_time =  1.0
+            jump = 1.0
+            feet_air_time = 1.0
             collision = -1.
             feet_stumble = -0.0 
             action_rate = -0.01

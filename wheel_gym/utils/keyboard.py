@@ -83,14 +83,15 @@ class KeyboardCtrl:
                 #self.env.commands[:, 3] = wrap_to_pi(self.env.commands[:, 3])
             if ui_event.action == "rightturn":
                 self.env.commands[:, 3] = angle_operate(self.env.commands[:, 3], -0.5)
-
+            if ui_event.action == "jump":
+                self.env.commands[:, 4] = 0.1
             if ui_event.action == "push_robot":
                 self.env._push_robots()
             if ui_event.action == "stop":
                 self.env.commands[:, 0] = 0
                 self.env.commands[:, 2] = 0
                 self.env.commands[:, 3] = 0
-
+                self.env.commands[:, 4] = 0
             # if ui_event.action == "jump":
             #     self.env.commands[:, 5] = 0
             #     self.env.commands[:, 4] = self.jump_height

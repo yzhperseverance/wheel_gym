@@ -595,6 +595,8 @@ class LeggedRobot(BaseTask):
         hf_params.static_friction = self.cfg.terrain.static_friction
         hf_params.dynamic_friction = self.cfg.terrain.dynamic_friction
         hf_params.restitution = self.cfg.terrain.restitution
+        # add_heightfield的坐标系方向跟世界系好像不一样，在terrain.py中对heightsamples转置了一次
+        # 这里要对add_heightfield的地形再转置一次，这样测量的高度才是正确的
         self.gym.add_heightfield(self.sim, self.terrain.heightsamples.T.reshape(-1), hf_params)
         self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows, self.terrain.tot_cols).to(self.device)
 

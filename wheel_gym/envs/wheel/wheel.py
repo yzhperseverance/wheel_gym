@@ -178,6 +178,7 @@ class WheelRobot(LeggedRobot):
         self.last_dof_vel[env_ids] = 0.
         self.feet_air_time[env_ids] = 0.
         self.episode_length_buf[env_ids] = 0
+        self.jump_interval_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
         # fill extras
         self.extras["episode"] = {}
@@ -220,7 +221,6 @@ class WheelRobot(LeggedRobot):
 
         # q = (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos  # 计算当前关节位置与默认位置的偏差，并进行缩放
         # dq = self.dof_vel * self.obs_scales.dof_vel  # 计算关节速度，并进行缩放
-        # print("dof_pos=", self.dof_pos)
 
         self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,  # 3
                                   self.base_ang_vel * self.obs_scales.ang_vel,  # 3
@@ -231,11 +231,12 @@ class WheelRobot(LeggedRobot):
                                   self.theta0_dot * self.obs_scales.dof_vel,  # 2
                                   self.L0 * self.obs_scales.L0,  # 2
                                   self.L0_dot * self.obs_scales.L0_vel,  # 2
-                                  self.dof_pos * self.obs_scales.dof_pos,  # 2
-                                  self.dof_vel * self.obs_scales.dof_vel,  # 2
+                                  self.dof_pos * self.obs_scales.dof_pos,  # 6
+                                  self.dof_vel * self.obs_scales.dof_vel,  # 6
                                   self.actions,  # 6
                                   ), dim=-1)
-        heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
+
+        heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, -1,
                              1.) * self.obs_scales.height_measurements
         self.privileged_obs_buf = torch.cat((
             self.obs_buf,
@@ -383,6 +384,25 @@ class WheelRobot(LeggedRobot):
         if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
             self._push_robots()
 
+        if self.cfg.commands.allow_jump:
+            contact = self.contact_forces[:, self.feet_indices, 2] > 1.
+            # TODO:跳跃后一段时间内取消跳跃指令
+
+            # Get the z-position of the feet and compute the change in z-position
+            feet_z = torch.mean(
+                self.rigid_state[:, self.feet_indices, 2].unsqueeze(-1) - self.measured_heights.unsqueeze(1) - 0.07, dim=2)
+            #delta_z = feet_z - self.last_feet_z
+            self.feet_height = feet_z
+            self.feet_height *= ~contact
+            # self.jump_interval_buf[torch.any(self.first_contact)] = self.episode_length_buf[torch.any(self.first_contact)] + int(self.cfg.env.jump_interval_time_s / self.dt)
+            # jump_interval_mask = self.episode_length_buf > self.jump_interval_buf
+            # self.commands[~jump_interval_mask, 4] = 0
+            #
+            # if jump_interval_mask.sum() > 0:
+            #     self.commands[jump_interval_mask, 4] = torch_rand_float(self.command_ranges["jump_height"][0],
+            #                                     self.command_ranges["jump_height"][1], (jump_interval_mask.sum(),1),
+            #                                     device=self.device).squeeze(1)
+
     def leg_post_physics_step(self):
         self.theta1 = torch.cat(
             (self.dof_pos[:, 0].unsqueeze(1), -self.dof_pos[:, 3].unsqueeze(1)), dim=1
@@ -444,15 +464,17 @@ class WheelRobot(LeggedRobot):
             self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
                                                          self.command_ranges["heading"][1], (len(env_ids), 1),
                                                          device=self.device).squeeze(1)
-        jump_heights = torch_rand_float(self.command_ranges["jump_height"][0],
-                                        self.command_ranges["jump_height"][1], (len(env_ids), 1),
-                                        device=self.device)
-        mask = (
-                torch.rand(len(env_ids), 1, device=self.device)
-                > self.cfg.commands.threshold
-        )
-        jump_heights[mask] = 0.0
-        self.commands[env_ids, 4] = jump_heights.squeeze(1)
+        if self.cfg.commands.allow_jump:
+            jump_heights = torch_rand_float(self.command_ranges["jump_height"][0],
+                                            self.command_ranges["jump_height"][1], (len(env_ids), 1),
+                                            device=self.device)
+            mask = (
+                    torch.rand(len(env_ids), 1, device=self.device)
+                    > self.cfg.commands.threshold
+            )
+            jump_heights[mask] = 0.0
+            self.commands[env_ids, 4] = jump_heights.squeeze(1)
+
         # 把一些比较小的速度设成0
         # set small commands to zero
         self.commands[env_ids, 0] *= (torch.abs(self.commands[env_ids, 0]) > 0.1)
@@ -623,15 +645,14 @@ class WheelRobot(LeggedRobot):
         noise_vec[:3] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
         noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
         noise_vec[6:9] = noise_scales.gravity * noise_level
-        noise_vec[9:12] = 0.  # commands
-        noise_vec[12:14] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
-        noise_vec[14:16] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[16:18] = noise_scales.l0 * noise_level * self.obs_scales.L0
-        noise_vec[18:20] = noise_scales.l0_dot * noise_level * self.obs_scales.L0_vel
-        noise_vec[20:22] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
-        noise_vec[22:24] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[24:30] = 0.0
-
+        noise_vec[9:13] = 0.  # commands
+        noise_vec[13:15] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
+        noise_vec[15:17] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[17:19] = noise_scales.l0 * noise_level * self.obs_scales.L0
+        noise_vec[19:21] = noise_scales.l0_dot * noise_level * self.obs_scales.L0_vel
+        noise_vec[21:27] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
+        noise_vec[27:33] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[33:39] = 0.0
         # obs里默认不加height，不需要这项噪声
         # if self.cfg.terrain.measure_heights:
         #     noise_vec[48:235] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
@@ -693,7 +714,8 @@ class WheelRobot(LeggedRobot):
             requires_grad=False, )  # TODO change this
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float,
                                          device=self.device, requires_grad=False)
-        self.feet_height = torch.zeros((self.num_envs, 2), dtype=torch.float, device=self.device, requires_grad=False)
+        self.feet_height = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.float, device=self.device, requires_grad=False)
+        self.first_contact = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.float, device=self.device, requires_grad=False)
         self.last_contacts = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device,
                                          requires_grad=False)
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
@@ -857,10 +879,17 @@ class WheelRobot(LeggedRobot):
     def _reward_lin_vel_z(self):
         # print("base_lin_vel=", torch.square(self.base_lin_vel[:, 2]))
         # Penalize z axis base linear velocity
-        mask = self.commands[:, 4] > 0
         rew = torch.square(self.base_lin_vel[:, 2])
-        rew[mask] *= -1  # 有跳跃命令的时候奖励z轴速度
+        rew *= self.commands[:, 4] == 0  # 有跳跃命令的时候奖励z轴速度
         return rew
+
+    def _reward_lin_vel_z_jump(self):
+        max_height_body_reached = 0.8 * (self.commands[:, 4] + self.commands[:, 1])
+        current_body_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+        rew_z = torch.square(self.base_lin_vel[:, 2])
+        rew_z[current_body_height >= max_height_body_reached] *= -1
+        rew_z *= self.commands[:, 4] > 0
+        return rew_z
 
     def _reward_ang_vel_xy(self):
         # Penalize xy axes base angular velocity
@@ -966,22 +995,16 @@ class WheelRobot(LeggedRobot):
         Calculates reward based on the clearance of the swing leg from the ground during movement.
         Encourages appropriate lift of the feet during the swing phase of the gait.
         """
-        # Compute feet contact mask
-        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
-        # TODO:跳跃后一段时间内取消跳跃指令
 
-        # Get the z-position of the feet and compute the change in z-position
-        feet_z = torch.mean(
-            self.rigid_state[:, self.feet_indices, 2].unsqueeze(-1) - self.measured_heights.unsqueeze(1) - 0.07, dim=2)
-        #delta_z = feet_z - self.last_feet_z
-        self.feet_height = feet_z
-        #self.last_feet_z = feet_z
         # Compute swing mask
         jump_mask = self.commands[:, 4] > 0.0
         # feet height should be closed to target feet height at the peak
-        rew_pos = torch.abs(self.feet_height - self.commands[:, 4].unsqueeze(1))
-        rew_pos = torch.sum(rew_pos * jump_mask.unsqueeze(1), dim=1)
-        self.feet_height *= ~contact  # 再精确确定一下feet_height是否落地吧？
+        rew_pos = torch.abs(self.feet_height - self.commands[:, 4].unsqueeze(1)) < 0.015
+        rew_pos = torch.sum(rew_pos, dim=1)
+        base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+        rew_pos += torch.abs(base_height - self.commands[:, 1] - self.commands[:, 4]) < 0.015
+        rew_pos *= jump_mask
+          # 再精确确定一下feet_height是否落地吧？
         return rew_pos
 
     def _reward_feet_air_time(self):
@@ -992,13 +1015,13 @@ class WheelRobot(LeggedRobot):
         contact_filt = torch.logical_or(contact, self.last_contacts)
         self.last_contacts = contact
         #
-        first_contact = (self.feet_air_time > 0.) * contact_filt
+        self.first_contact = (self.feet_air_time > 0.) * contact_filt
         self.feet_air_time += self.dt
         # 如果空中时间大于 0.5 秒，说明脚部在空中停留时间较长，会产生较高的奖励。
-        rew_airTime = torch.sum((self.feet_air_time - 0.4) * first_contact,
+        rew_airTime = torch.sum((self.feet_air_time - 0.4) * self.first_contact,
                                 dim=1)  # reward only on first contact with the ground
-        #rew_airTime *= torch.abs(self.commands[:, 0]) > 0.1  # no reward for zero command
-        rew_airTime *= self.commands[:, 4] > 0.
+        rew_airTime *= torch.abs(self.commands[:, 0]) > 0.1  # no reward for zero command
+        rew_airTime *= self.commands[:, 4] > 0.0
         self.feet_air_time *= ~contact_filt  # 第一次落地后，重置feet_air_time
         return rew_airTime
 

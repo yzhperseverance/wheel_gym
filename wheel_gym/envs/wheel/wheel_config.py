@@ -41,6 +41,7 @@ class WheelRobotCfg(LeggedRobotCfg):
         num_privileged_obs = 247 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 6
 
+        jump_interval_time_s = 1.0
         fail_to_terminal_time_s = 0.5
 
     class commands(LeggedRobotCfg.commands):
@@ -49,6 +50,7 @@ class WheelRobotCfg(LeggedRobotCfg):
         num_commands = 5 # default: lin_vel_x, height, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
+        allow_jump = True
         threshold = 0.5
         class ranges:
             # TODO：这里修改x的范围会报cuda内存没对齐的错
@@ -56,7 +58,7 @@ class WheelRobotCfg(LeggedRobotCfg):
             height = [0.2, 0.4]   # min max [m/s]
             ang_vel_yaw = [-3.14, 3.14]    # min max [rad/s]
             heading = [-3.14, 3.14]
-            jump_height = [0.05, 0.25]
+            jump_height = [0.15, 0.3]
 
     class init_state(LeggedRobotCfg.init_state):
         pos = [0.0, 0.0, 1.0] # x,y,z [m]
@@ -90,7 +92,7 @@ class WheelRobotCfg(LeggedRobotCfg):
         decimation = 2
 
     class terrain(LeggedRobotCfg.terrain):
-        mesh_type = 'heightfield'  # "heightfield" # none, plane, heightfield or trimesh
+        mesh_type = 'plane'  # "heightfield" # none, plane, heightfield or trimesh
         measure_heights = True
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
         terrain_proportions = [0.5, 0.5, 0, 0, 0]
@@ -154,13 +156,14 @@ class WheelRobotCfg(LeggedRobotCfg):
             tracking_ang_vel = 1.0
             nominal_state = -0.1
             lin_vel_z = -2.0
+            lin_vel_z_jump = 1.0
             ang_vel_xy = -0.05
             orientation = -10.0
             torques = -0.0001
             dof_vel = -5e-5
             dof_acc = -2.5e-7
             feet_match = -2.0
-            jump = 1.0
+            jump = 2.0
             feet_air_time = 1.0
             collision = -1.
             feet_stumble = -0.0 

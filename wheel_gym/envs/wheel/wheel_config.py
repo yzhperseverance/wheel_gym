@@ -53,8 +53,7 @@ class WheelRobotCfg(LeggedRobotCfg):
         allow_jump = True
         threshold = 0.5
         class ranges:
-            # TODO：这里修改x的范围会报cuda内存没对齐的错
-            lin_vel_x = [-1.0, 1.0] # min max [m/s]
+            lin_vel_x = [-2.0, 2.0] # min max [m/s]
             height = [0.2, 0.4]   # min max [m/s]
             ang_vel_yaw = [-3.14, 3.14]    # min max [rad/s]
             heading = [-3.14, 3.14]
@@ -156,7 +155,7 @@ class WheelRobotCfg(LeggedRobotCfg):
             tracking_ang_vel = 1.0
             nominal_state = -0.1
             lin_vel_z = -2.0
-            lin_vel_z_jump = 2.0
+            #lin_vel_z_jump = 2.0
             ang_vel_xy = -0.05
             orientation = -10.0
             torques = -0.0001

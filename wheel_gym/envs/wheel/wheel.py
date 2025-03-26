@@ -247,6 +247,7 @@ class WheelRobot(LeggedRobot):
             self.last_actions,  # 6
             self.env_frictions,  # 1
             (self.base_mass - self.base_mass.mean()).unsqueeze(1),  # 1
+            #torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1),
             heights
         ), dim=-1)
         # add perceptive inputs if not blind
@@ -409,9 +410,9 @@ class WheelRobot(LeggedRobot):
             jump_interval_mask = self.episode_length_buf > self.jump_interval_buf
             self.commands[~jump_interval_mask, 4] = 0
             mask = jump_interval_mask & (self.raw_jump_height > 0)
-            self.commands[mask, 4] = torch_rand_float(self.command_ranges["jump_height"][0],
-                                            self.command_ranges["jump_height"][1], (mask.sum(), 1),
-                                            device=self.device).squeeze(1)
+            # self.commands[mask, 4] = torch_rand_float(self.command_ranges["jump_height"][0],
+            #                                 self.command_ranges["jump_height"][1], (mask.sum(), 1),
+            #                                 device=self.device).squeeze(1)
             # print("jump_interval_buf=", self.jump_interval_buf)
             # print("episode_length_buf=", self.episode_length_buf)
             # print("command=", self.commands[:, 4])
@@ -896,7 +897,7 @@ class WheelRobot(LeggedRobot):
         # Penalize z axis base linear velocity
         mask = self.commands[:, 4] > 0
         rew = torch.square(self.base_lin_vel[:, 2])
-        rew[mask] *= 0  # 有跳跃命令的时候奖励z轴速度
+        rew[mask] *= -1  # 有跳跃命令的时候奖励z轴速度
         return rew
 
     def _reward_lin_vel_z_jump(self):

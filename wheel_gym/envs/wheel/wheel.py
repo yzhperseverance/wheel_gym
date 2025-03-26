@@ -221,7 +221,6 @@ class WheelRobot(LeggedRobot):
 
         # q = (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos  # 计算当前关节位置与默认位置的偏差，并进行缩放
         # dq = self.dof_vel * self.obs_scales.dof_vel  # 计算关节速度，并进行缩放
-
         self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,  # 3
                                   self.base_ang_vel * self.obs_scales.ang_vel,  # 3
                                   self.projected_gravity,  # 3
@@ -244,6 +243,7 @@ class WheelRobot(LeggedRobot):
             self.rand_push_force[:, :2],  # 2
             self.rand_push_torque,  # 3
             self.feet_height, # 2
+            #self.feet_air_time, # 2
             self.last_actions,  # 6
             self.env_frictions,  # 1
             (self.base_mass - self.base_mass.mean()).unsqueeze(1),  # 1
@@ -394,14 +394,27 @@ class WheelRobot(LeggedRobot):
             #delta_z = feet_z - self.last_feet_z
             self.feet_height = feet_z
             self.feet_height *= ~contact
-            # self.jump_interval_buf[torch.any(self.first_contact)] = self.episode_length_buf[torch.any(self.first_contact)] + int(self.cfg.env.jump_interval_time_s / self.dt)
-            # jump_interval_mask = self.episode_length_buf > self.jump_interval_buf
-            # self.commands[~jump_interval_mask, 4] = 0
+            # 用来延续状态，判断是否是第一次落地。
+            contact_filt = torch.logical_or(contact, self.last_contacts)
+            self.last_contacts = contact
             #
-            # if jump_interval_mask.sum() > 0:
-            #     self.commands[jump_interval_mask, 4] = torch_rand_float(self.command_ranges["jump_height"][0],
-            #                                     self.command_ranges["jump_height"][1], (jump_interval_mask.sum(),1),
-            #                                     device=self.device).squeeze(1)
+            self.first_contact = (self.feet_air_time > 0.) * contact_filt
+
+            # 只有脚接触地，还没进入跳跃冷静期的并且隐含着初始跳跃高度不为0的才会增加interval_buf
+            self.jump_interval_buf[torch.any(self.first_contact, dim=1) & (self.commands[:, 4] > 0)] = (
+                    self.episode_length_buf[torch.any(self.first_contact, dim=1) & (self.commands[:, 4] > 0)] +
+                    int(self.cfg.env.jump_interval_time_s / self.dt)
+            )
+
+            jump_interval_mask = self.episode_length_buf > self.jump_interval_buf
+            self.commands[~jump_interval_mask, 4] = 0
+            mask = jump_interval_mask & (self.raw_jump_height > 0)
+            self.commands[mask, 4] = torch_rand_float(self.command_ranges["jump_height"][0],
+                                            self.command_ranges["jump_height"][1], (mask.sum(), 1),
+                                            device=self.device).squeeze(1)
+            # print("jump_interval_buf=", self.jump_interval_buf)
+            # print("episode_length_buf=", self.episode_length_buf)
+            # print("command=", self.commands[:, 4])
 
     def leg_post_physics_step(self):
         self.theta1 = torch.cat(
@@ -474,6 +487,7 @@ class WheelRobot(LeggedRobot):
             )
             jump_heights[mask] = 0.0
             self.commands[env_ids, 4] = jump_heights.squeeze(1)
+            self.raw_jump_height[env_ids] = jump_heights.squeeze(1)
 
         # 把一些比较小的速度设成0
         # set small commands to zero
@@ -712,6 +726,7 @@ class WheelRobot(LeggedRobot):
         self.commands_scale = torch.tensor(
             [self.obs_scales.lin_vel, self.obs_scales.height_measurements, self.obs_scales.ang_vel], device=self.device,
             requires_grad=False, )  # TODO change this
+        self.raw_jump_height = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float,
                                          device=self.device, requires_grad=False)
         self.feet_height = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.float, device=self.device, requires_grad=False)
@@ -879,8 +894,9 @@ class WheelRobot(LeggedRobot):
     def _reward_lin_vel_z(self):
         # print("base_lin_vel=", torch.square(self.base_lin_vel[:, 2]))
         # Penalize z axis base linear velocity
+        mask = self.commands[:, 4] > 0
         rew = torch.square(self.base_lin_vel[:, 2])
-        rew *= self.commands[:, 4] == 0  # 有跳跃命令的时候奖励z轴速度
+        rew[mask] *= 0  # 有跳跃命令的时候奖励z轴速度
         return rew
 
     def _reward_lin_vel_z_jump(self):
@@ -977,12 +993,10 @@ class WheelRobot(LeggedRobot):
     def _reward_base_height(self):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-
         base_height_error = torch.abs(base_height - self.commands[:, 1])
         return torch.exp(-base_height_error / self.cfg.rewards.tracking_sigma)
 
     def _reward_nominal_state(self):
-        # return torch.square(self.theta0[:, 0] - self.theta0[:, 1])
         return torch.square(self.theta0[:, 0] - self.theta0[:, 1])
 
     def _reward_tracking_ang_vel(self):
@@ -999,10 +1013,11 @@ class WheelRobot(LeggedRobot):
         # Compute swing mask
         jump_mask = self.commands[:, 4] > 0.0
         # feet height should be closed to target feet height at the peak
-        rew_pos = torch.abs(self.feet_height - self.commands[:, 4].unsqueeze(1)) < 0.015
+        rew_pos = torch.abs(self.feet_height - self.commands[:, 4].unsqueeze(1)) < 0.01
         rew_pos = torch.sum(rew_pos, dim=1)
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-        rew_pos += torch.abs(base_height - self.commands[:, 1] - self.commands[:, 4]) < 0.015
+        rew_pos += torch.abs(base_height - self.commands[:, 1] - self.commands[:, 4]) < 0.01
+        rew_pos = torch.exp(rew_pos / self.cfg.rewards.tracking_sigma)
         rew_pos *= jump_mask
           # 再精确确定一下feet_height是否落地吧？
         return rew_pos
@@ -1011,18 +1026,17 @@ class WheelRobot(LeggedRobot):
         # Reward long steps
         # Need to filter the contacts because the contact reporting of PhysX is unreliable on meshes
         contact = self.contact_forces[:, self.feet_indices, 2] > 1.
-        # 用来延续状态，判断是否是第一次落地。
         contact_filt = torch.logical_or(contact, self.last_contacts)
-        self.last_contacts = contact
-        #
-        self.first_contact = (self.feet_air_time > 0.) * contact_filt
+
         self.feet_air_time += self.dt
         # 如果空中时间大于 0.5 秒，说明脚部在空中停留时间较长，会产生较高的奖励。
         rew_airTime = torch.sum((self.feet_air_time - 0.4) * self.first_contact,
                                 dim=1)  # reward only on first contact with the ground
         rew_airTime *= torch.abs(self.commands[:, 0]) > 0.1  # no reward for zero command
+        rew_airTime = torch.exp(rew_airTime / self.cfg.rewards.tracking_sigma)
         rew_airTime *= self.commands[:, 4] > 0.0
         self.feet_air_time *= ~contact_filt  # 第一次落地后，重置feet_air_time
+
         return rew_airTime
 
     def _reward_stumble(self):

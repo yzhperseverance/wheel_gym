@@ -53,6 +53,7 @@ def play(args):
     env_cfg.domain_rand.randomize_friction = True
     env_cfg.domain_rand.push_robots = False
     env_cfg.commands.resampling_time = 1000000
+    env_cfg.commands.allow_jump = True
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
     obs = env.get_observations()
@@ -80,7 +81,7 @@ def play(args):
     img_idx = 0
 
     ctrl = keyboard.KeyboardCtrl(env, env_cfg)
-    base_command = torch.tensor([0.2, 0.1, 0, 0, 0], dtype=torch.float32)
+    base_command = torch.tensor([0.2, 0.1, 0, 0, 0.4], dtype=torch.float32)
     env.commands[:, ] = base_command
 
 

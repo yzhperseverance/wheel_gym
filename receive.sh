@@ -2,7 +2,7 @@
 
 # 目标服务器信息
 USER="yzh"
-SERVER="10.192.40.42"
+SERVER="10.192.40.124"
 REMOTE_PATH="/home/yzh/wheel_gym/logs/test/"
 latest_log_folder=$(ssh $USER@$SERVER "ls -d ${REMOTE_PATH}* | sort -r | head -n 1")
 

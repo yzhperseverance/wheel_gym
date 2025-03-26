@@ -2,7 +2,7 @@
 
 # 目标服务器信息
 USER="yzh"
-SERVER="10.192.40.42"
+SERVER="10.192.40.124"
 REMOTE_PATH="/home/yzh/"
 
 # 本地路径

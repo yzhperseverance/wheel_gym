@@ -152,18 +152,18 @@ class WheelRobotCfg(LeggedRobotCfg):
         class scales:
             termination = -0.0
             tracking_lin_vel = 1.0
-            base_height = 1.0
+            base_height = 1.5
             tracking_ang_vel = 1.0
             nominal_state = -0.1
             lin_vel_z = -2.0
-            lin_vel_z_jump = 1.0
+            lin_vel_z_jump = 2.0
             ang_vel_xy = -0.05
             orientation = -10.0
             torques = -0.0001
             dof_vel = -5e-5
             dof_acc = -2.5e-7
             feet_match = -2.0
-            jump = 2.0
+            jump = 1.0
             feet_air_time = 1.0
             collision = -1.
             feet_stumble = -0.0 

@@ -57,3 +57,7 @@ runs
 # other
 *.egg-info
 __pycache__
+
+connect.sh
+receive.sh
+经验总结.md

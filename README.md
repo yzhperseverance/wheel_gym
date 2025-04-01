@@ -4,9 +4,9 @@ This repository relies on resources from [legged_gym](https://github.com/leggedr
 ### Installation ###
 1. Generate a new Python virtual environment with Python 3.8 using `conda create -n myenv python=3.8`
 
-2. - Install PyTorch 1.13 with Cuda-11.7:
+2. Install PyTorch 1.13 with Cuda-11.7:
 
-      `conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 pytorch-cuda=11.7 -c pytorch -c nvidia`
+   `conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 pytorch-cuda=11.7 -c pytorch -c nvidia`
 
 3. Install Isaac Gym
    - Download and install Isaac Gym Preview 3 (Preview 2 will not work!) from https://developer.nvidia.com/isaac-gym
